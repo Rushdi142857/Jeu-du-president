@@ -1,5 +1,8 @@
+import logging
+
 import pandas as pd
 
+from president_game.logger import init_logger
 # pd.options.plotting.backend = "plotly"
 
 from president_game.player import DumbPlayer, AggressivePlayer
@@ -7,6 +10,8 @@ from president_game.partie import Partie
 import plotly.express as px
 from itertools import permutations
 
+
+logger = logging.getLogger()
 
 class Etudes:
     @staticmethod
@@ -95,6 +100,7 @@ class Etudes:
         """
         Affiche le déroulé d'une partie
         """
+        logger.info("Lancement d'une partie")
         nb_joueurs = 5
         players = [AggressivePlayer() for _ in range(nb_joueurs)]
         role_players = ["Trou", "Prez", "Vice-Trou", "Vice-Prez", "Neutre"]
@@ -163,6 +169,7 @@ class Etudes:
 
 
 if __name__ == "__main__":
+    init_logger()
     # Etudes.etude_avantage_president()
     Etudes.etude_coherence_une_partie()
     # Etudes.etude_force_joueurs()

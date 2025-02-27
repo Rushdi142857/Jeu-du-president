@@ -14,7 +14,7 @@ class Player(ABC):
         cartes_plateau: list[list[int]],
         risque_saut: bool,
         historique_jeux: list[int],
-    ) -> list[int] | None:
+    ) -> list[int]:
         """
         Votre jeu ! Vous devez renvoyer une des cartes de votre main
 
@@ -30,7 +30,7 @@ class Player(ABC):
         :param risque_saut: (bool) True si vous allez être sauté si vous ne jouez pas une carte identique. Impossible de tricher.
         :param historique_jeux: (list[int]) Ensemble des cartes qui ont déjà été jouées
         C'est du même format que votre main.
-        :return: (list[int]) | None La ou les cartes de votre main que vous jouez. None si vous ne jouez rien.
+        :return: (list[int]) La ou les cartes de votre main que vous jouez. La liste est vide si vous ne jouez rien.
         Par exemple, si vous voulez jouer 10.10.10 (Qui correspond à K.K.K dans le vrai jeu),
         vous devez renvoyer [10, 10, 10]
         """
@@ -82,10 +82,19 @@ class Player(ABC):
         # return "MonNomdeJoueur"
         pass
 
+    def __str__(self):
+        return self.get_name()
+
+class CheatPlayer(Player):
+    def get_name(self):
+        return "CheatP"
+
+    def que_jouer(self, main, cartes_plateau, risque_saut, historique_jeux):
+        return [0]
 
 class DumbPlayer(Player):
     def get_name(self):
-        return "DumbPlayer"
+        return "DumbP"
 
     def que_jouer(self, main, cartes_plateau, risque_saut, historique_jeux):
         """
@@ -126,12 +135,13 @@ class DumbPlayer(Player):
 
 class AggressivePlayer(Player):
     def get_name(self):
-        return "AggressivePlayer"
+        return "AggressiveP"
 
     def que_jouer(self, main, cartes_plateau, risque_saut, historique_jeux):
         """
         Stratégie aggressive : On joue si on a plus fort, et on casse nos doubles et triples si besoin
         """
+        return [0]
         main_dict = convert_sorted_hand_to_dict(main)
         if not cartes_plateau:
             # On considère que, si on a la main, on joue notre ou nos plus faibles cartes
@@ -164,4 +174,4 @@ class AggressivePlayer(Player):
                     return [lowest_value for _ in range(type_jeu)]
                 type_essaye += 1
             # On n'a rien trouvé à jouer
-            return None
+            return []

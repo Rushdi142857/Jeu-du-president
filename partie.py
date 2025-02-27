@@ -1,3 +1,4 @@
+import logging
 import operator
 from random import shuffle
 from copy import deepcopy, copy
@@ -8,7 +9,7 @@ from president_game.utils import (
     show_pretty_pose,
     show_pretty_hand,
 )
-
+logger = logging.getLogger(__name__)
 
 class Partie:
     # Common elements for a whole game
@@ -64,6 +65,9 @@ class Partie:
                 ]
         else:
             self.role_players = role_players
+
+        self.indexed_name_players = [f"{i}_{player.get_name()}" for i, player in enumerate(players)]
+
         if cards_shuffled:
             self.cards_shuffled = cards_shuffled
         else:
@@ -92,16 +96,15 @@ class Partie:
             self.initial_cards_players.append(cartes_distrib)
             self.players[i].donner_main(cartes_distrib)
         self.current_cards_players = deepcopy(self.initial_cards_players)
-        self.pretty_jeu()
+        self.pretty_jeu(self.indexed_name_players)
 
-    def pretty_jeu(self, init_str="Jeu initial: "):
+    def pretty_jeu(self, name_players, init_str="Jeu initial: "):
         if not self.save_events:
             return
         events = [init_str]
         for i in range(self.nb_joueurs):
-            events.append(f"{self.role_players[i]}: {self.show_pretty_hand(i)} ")
-        events.append("\n")
-        self.all_events += events
+            events.append(f"{name_players[i]} ({self.role_players[i]}): {self.show_pretty_hand(i)} ")
+        logger.info(" ".join(events))
 
     def show_pretty_hand(self, index_player) -> str:
         return show_pretty_hand(self.current_cards_players[index_player])
@@ -143,7 +146,8 @@ class Partie:
             )
             if card not in self.current_cards_players[joueur_superieur]:
                 raise ValueError(
-                    "{self.players[joueur_superieur].get_name()}, vice-prez, a tenté de donner une carte qu'il n'a pas"
+                    f"{self.players[joueur_superieur].get_name()}, vice-prez, a tenté de donner une carte "
+                    f"qu'il n'a pas"
                 )
             main_joueur_superieur.remove(card)
             self.current_cards_players[joueur_superieur] = main_joueur_superieur
@@ -157,7 +161,8 @@ class Partie:
             )
             if not set(cards).issubset(self.current_cards_players[joueur_superieur]):
                 raise ValueError(
-                    f"{self.players[joueur_superieur].get_name()}, prez, a tenté de donner des cartes qu'il n'a pas"
+                    f"{self.players[joueur_superieur].get_name()}, prez, a tenté de donner des cartes "
+                    f"qu'il n'a pas"
                 )
             for card in cards:
                 main_joueur_superieur.remove(card)
@@ -168,7 +173,6 @@ class Partie:
 
     def update_according_to_pose(
         self,
-        events_actuel,
         pose,
         cartes_joueurs,
         joueur_actuel,
@@ -176,12 +180,12 @@ class Partie:
         joueurs_en_jeu,
         classement,
         cartes_plateau,
+        liste_tricheurs
     ):
         if len(cartes_plateau):
             cartes_au_dessus = cartes_plateau[-1]
         else:
             cartes_au_dessus = None
-        events_actuel.append(f"Joue {show_pretty_pose(pose)} ")
         conditions_triche = [
             (not all(el == pose[0] for el in pose)),
             (
@@ -189,45 +193,54 @@ class Partie:
                 and operator.lt(pose[0], cartes_au_dessus[0])
             ),
             self.risque_saut and pose != cartes_au_dessus,
-            not set(pose).issubset(cartes_joueurs[joueur_actuel]),
+            not set(pose).issubset(cartes_joueurs[joueur_actuel])
         ]
         if any(conditions_triche):
-            # Mettre trou le tricheur
-            raise ValueError(f"Le joueur {self.players[joueur_actuel]} a triché ! ")
-        if pose == cartes_au_dessus:
-            self.counter_same_card += len(pose)
-            self.risque_saut = True
-        else:
-            self.counter_same_card = len(pose)
-            self.risque_saut = False
-        for el in pose:
-            cartes_joueurs[joueur_actuel].remove(el)
-
-        if not cartes_joueurs[joueur_actuel]:
-            events_actuel.append(f"{self.role_players[joueur_actuel]} a fini ")
+            # Mettre à trou le tricheur
+            logger.error(f"Le joueur {self.indexed_name_players[joueur_actuel]} "
+                         f"avec la main {self.show_pretty_hand(joueur_actuel)}"
+                         f" a essayé de jouer {str(pose)}, "
+                         f"il a triché ! ")
             joueurs_pas_fini.remove(joueur_actuel)
             joueurs_en_jeu.remove(joueur_actuel)
-            classement.append(joueur_actuel)
-        cartes_plateau.append(pose)
-        cartes_au_dessus = pose
+            liste_tricheurs.append(joueur_actuel)
+        else:
+            logger.info(f"{self.indexed_name_players[joueur_actuel]} avec la main "
+                        f"{self.show_pretty_hand(joueur_actuel)} "
+                        f"joue {show_pretty_pose(pose)} ")
+            if pose == cartes_au_dessus:
+                self.counter_same_card += len(pose)
+                self.risque_saut = True
+            else:
+                self.counter_same_card = len(pose)
+                self.risque_saut = False
+            for el in pose:
+                cartes_joueurs[joueur_actuel].remove(el)
 
-        # Si les 4 dernières cartes du plateau sont identiques, le joueur a la main
-        if self.counter_same_card == 4:
-            self.risque_saut = False
-            # events_actuel.append(f"\n Coupe de {self.role_players[joueur_actuel]} !! ")
-            events_actuel.append("Coupe !")
-            joueurs_en_jeu = [joueur_actuel]
+            if not cartes_joueurs[joueur_actuel]:
+                logger.info(f"{self.role_players[joueur_actuel]} a fini ")
+                joueurs_pas_fini.remove(joueur_actuel)
+                joueurs_en_jeu.remove(joueur_actuel)
+                classement.append(joueur_actuel)
+            cartes_plateau.append(pose)
+            cartes_au_dessus = pose
 
-        # Si le jour a joué un 2, il a la main
-        if pose[0] == self.highest_card - 1:
-            # events_actuel.append(f"{self.role_players[joueur_actuel]} prend la main ")
-            joueurs_en_jeu = [joueur_actuel]
+            # Si les 4 dernières cartes du plateau sont identiques, le joueur a la main
+            if self.counter_same_card == 4:
+                self.risque_saut = False
+                logger.info("Coupe !")
+                joueurs_en_jeu = [joueur_actuel]
 
-        # Révolution si 4 cartes identiques sont posées d'un coup
-        if len(pose) == 4:
-            events_actuel.append(f"\n Révolution de {pose[0]} !! \n")
-            self.risque_saut = False
-            raise NotImplementedError("La révolution n'a pas encore été implémentée !!")
+            # Si le jour a joué un 2, il a la main
+            if pose[0] == self.highest_card - 1:
+                # logger.info(f"{self.role_players[joueur_actuel]} prend la main ")
+                joueurs_en_jeu = [joueur_actuel]
+
+            # Révolution si 4 cartes identiques sont posées d'un coup
+            if len(pose) == 4:
+                logger.info(f"Révolution de {pose[0]} !!")
+                self.risque_saut = False
+                raise NotImplementedError("La révolution n'a pas encore été implémentée !!")
 
         return cartes_au_dessus, joueurs_en_jeu
 
@@ -236,6 +249,7 @@ class Partie:
         nb_joueurs = self.nb_joueurs
         cartes_deja_jouees = []
         classement = []
+        liste_tricheurs = []
         historique_jeux = []
         cartes_plateau = []
         joueurs_en_jeu = [i for i in range(nb_joueurs)]
@@ -246,47 +260,63 @@ class Partie:
             player.donner_main(self.current_cards_players[i])
 
         events_actuel = []
-        while len(classement) < nb_joueurs - 1:
+        while len(classement + liste_tricheurs) < nb_joueurs - 1:
             prochain_joueur = joueurs_en_jeu[
                 (joueurs_en_jeu.index(joueur_actuel) + 1) % len(joueurs_en_jeu)
             ]
-            events_actuel.append(
-                f"{self.role_players[joueur_actuel]} "
-                f"{self.show_pretty_hand(joueur_actuel)} "
-            )
-
-            pose = self.players[joueur_actuel].que_jouer(
-                copy(cartes_joueurs[joueur_actuel]),
-                copy(cartes_plateau),
-                self.risque_saut,
-                copy(cartes_deja_jouees),
-            )
-
-            if pose is not None:
-                cartes_au_dessus, joueurs_en_jeu = self.update_according_to_pose(
-                    events_actuel,
-                    pose,
-                    cartes_joueurs,
-                    joueur_actuel,
-                    joueurs_pas_fini,
-                    joueurs_en_jeu,
-                    classement,
-                    cartes_plateau,
+            try:
+                pose = self.players[joueur_actuel].que_jouer(
+                    copy(cartes_joueurs[joueur_actuel]),
+                    copy(cartes_plateau),
+                    self.risque_saut,
+                    copy(cartes_deja_jouees),
                 )
-                cartes_deja_jouees = sorted(cartes_deja_jouees + pose)
+            except Exception:
+                logger.error(f"Le code de {self.indexed_name_players[joueur_actuel]} est beugué : il est éliminé du round",
+                             exc_info=True)
+                joueurs_pas_fini.remove(joueur_actuel)
+                joueurs_en_jeu.remove(joueur_actuel)
+                liste_tricheurs.append(joueur_actuel)
             else:
-                if self.risque_saut:
-                    events_actuel.append("est sauté")
-                    self.risque_saut = False
-                else:
-                    events_actuel.append("Passe ")
+                if not isinstance(pose, list) or not all(isinstance(x, int) for x in pose):
+                    logger.error(f"Le joueur {self.indexed_name_players[joueur_actuel]} n'a pas renvoyé "
+                                 f"le bon format: {str(pose)} : il est éliminé du round",
+                                 exc_info=True)
+                    joueurs_pas_fini.remove(joueur_actuel)
                     joueurs_en_jeu.remove(joueur_actuel)
+                    liste_tricheurs.append(joueur_actuel)
+                else:
+                    if pose is not None:
+                        cartes_au_dessus, joueurs_en_jeu = self.update_according_to_pose(
+                            pose,
+                            cartes_joueurs,
+                            joueur_actuel,
+                            joueurs_pas_fini,
+                            joueurs_en_jeu,
+                            classement,
+                            cartes_plateau,
+                            liste_tricheurs
+                        )
+                        cartes_deja_jouees = sorted(cartes_deja_jouees + pose)
+                    else:
+                        if not cartes_plateau:
+                            logger.error(f"Le joueur : {self.indexed_name_players[joueur_actuel]} a la main "
+                                         f"mais ne joue pas : il va en dernier et le jeu continue")
+                            joueurs_pas_fini.remove(joueur_actuel)
+                            joueurs_en_jeu.remove(joueur_actuel)
+                            liste_tricheurs.append(joueur_actuel)
+                        if self.risque_saut:
+                            logger.info("est sauté")
+                            self.risque_saut = False
+                        else:
+                            logger.info("Passe ")
+                            joueurs_en_jeu.remove(joueur_actuel)
 
             if len(joueurs_en_jeu) == 1:
                 self.risque_saut = False
                 if joueurs_en_jeu[0] not in joueurs_pas_fini:
                     joueurs_en_jeu = [prochain_joueur]
-                events_actuel.append(
+                logger.info(
                     f"{self.role_players[joueurs_en_jeu[0]]} a la main"
                 )
                 historique_jeux.append(copy(cartes_plateau))
@@ -296,14 +326,13 @@ class Partie:
                 joueurs_en_jeu = copy(joueurs_pas_fini)
 
             joueur_actuel = prochain_joueur
-            events_actuel.append("\n")
 
         # Ajout du joueur arrivé en dernier
         classement = classement + [
-            ({i for i in range(nb_joueurs)} - set(classement)).pop()
-        ]
+            ({i for i in range(nb_joueurs)} - set(liste_tricheurs) - set(classement)).pop()
+        ] + liste_tricheurs
 
-        events_actuel.append(
+        logger.info(
             "Classement final: " + " ".join([self.role_players[i] for i in classement])
         )
 
