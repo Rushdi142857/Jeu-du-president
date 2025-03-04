@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
+from time import sleep
 
 from president_game.utils import convert_sorted_hand_to_dict
 
 
 class Player(ABC):
     main: list[int]
-    name: str | None = None
+    name: str = "SleepingPlayer"
 
     @abstractmethod
     def que_jouer(
@@ -34,7 +35,7 @@ class Player(ABC):
         Par exemple, si vous voulez jouer 10.10.10 (Qui correspond à K.K.K dans le vrai jeu),
         vous devez renvoyer [10, 10, 10]
         """
-        pass
+        return []
 
     @staticmethod
     def mapping():
@@ -127,11 +128,22 @@ class DumbPlayer(Player):
                     if el[0] == nombre_joue and el[1] == type_jeu
                 ]
             if not mains_possibles:
-                return None
+                return []
             else:
                 lowest_value = min(mains_possibles)
                 return [lowest_value for _ in range(main_dict[lowest_value])]
 
+
+class SlowPlayer(Player):
+    def que_jouer(
+        self,
+        main: list[int],
+        cartes_plateau: list[list[int]],
+        risque_saut: bool,
+        historique_jeux: list[int],
+    ) -> list[int]:
+        sleep(4)
+        return []
 
 class AggressivePlayer(Player):
     def get_name(self):
@@ -141,7 +153,6 @@ class AggressivePlayer(Player):
         """
         Stratégie aggressive : On joue si on a plus fort, et on casse nos doubles et triples si besoin
         """
-        return [0]
         main_dict = convert_sorted_hand_to_dict(main)
         if not cartes_plateau:
             # On considère que, si on a la main, on joue notre ou nos plus faibles cartes

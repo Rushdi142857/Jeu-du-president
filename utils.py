@@ -1,5 +1,5 @@
 import collections
-
+from itertools import groupby
 
 def convert_dict_to_sorted_hand(main_dict):
     return sorted(
@@ -10,12 +10,12 @@ def convert_dict_to_sorted_hand(main_dict):
 def convert_sorted_hand_to_dict(main_list):
     return dict(collections.Counter(main_list))
 
+def show_super_pretty_hand(main):
+    if not main:
+        return ""
+    return ".".join("".join(group) for _, group in groupby([mapping_card_real_game(el) for el in main]))
 
-def show_pretty_hand(main):
-    return ".".join(mapping_cards_real_game(el) for el in main)
-
-
-def mapping_cards_real_game(el):
+def mapping_card_real_game(el: int):
     return {
         0: "3",
         1: "4",
@@ -34,4 +34,8 @@ def mapping_cards_real_game(el):
 
 
 def show_pretty_pose(pose):
-    return "".join([mapping_cards_real_game(el) for el in pose])
+    return "".join([mapping_card_real_game(el) for el in pose])
+
+
+if __name__ == '__main__':
+    print(show_super_pretty_hand(["A", "B", "B", "A"]))
