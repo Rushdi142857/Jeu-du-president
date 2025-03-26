@@ -194,7 +194,6 @@ class Etudes:
 
 
 if __name__ == "__main__":
-    # TODO : vision stylisée d'une partie
     init_logger()
     # Etudes.avantage_president()
     Etudes.coherence_une_partie()

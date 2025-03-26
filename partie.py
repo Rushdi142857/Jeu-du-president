@@ -4,9 +4,11 @@ from random import shuffle
 from copy import deepcopy, copy
 import concurrent.futures
 
+import pandas as pd
+
 from president_game.player import Player, DumbPlayer
 from president_game.utils import (
-    show_pretty_pose, show_super_pretty_hand,
+    show_pretty_pose, show_super_pretty_hand, pretty_actions_jouees,
 )
 logger = logging.getLogger(__name__)
 
@@ -235,6 +237,8 @@ class Partie:
             return []
         return [cartes_joueur[-1]]
 
+    def convert_pretty_play_to_df(self):
+        return
 
     def play_whole_game_from_cards(self):
         cartes_joueurs = self.current_cards_players
@@ -293,6 +297,7 @@ class Partie:
 
             if not flag_triche:
                 if pose:
+                    # Le joueur a tenté de jouer une carte
                     if cartes_plateau:
                         cartes_au_dessus = cartes_plateau[-1]
                     else:
@@ -316,9 +321,10 @@ class Partie:
                         joueurs_pas_fini.remove(joueur_actuel)
                         joueurs_en_jeu.remove(joueur_actuel)
                         liste_tricheurs.append(joueur_actuel)
+                        pretty_play_joueurs[joueur_actuel].append(["T"])
                     else:
                         # Ok, le joueur respecte les règles
-                        pretty_play_joueurs[joueur_actuel].append(pose)
+                        pretty_play_joueurs[joueur_actuel].append([str(el) for el in pose])
                         cartes_au_dessus, joueurs_en_jeu = self.update_according_to_pose(
                             pose,
                             cartes_joueurs,
@@ -336,12 +342,15 @@ class Partie:
                         joueurs_pas_fini.remove(joueur_actuel)
                         joueurs_en_jeu.remove(joueur_actuel)
                         liste_tricheurs.append(joueur_actuel)
+                        pretty_play_joueurs[joueur_actuel].append(["T"])
                     if self.risque_saut:
                         logger.info(f"Le joueur : {self.indexed_name_players[joueur_actuel]} est sauté")
                         self.risque_saut = False
+                        pretty_play_joueurs[joueur_actuel].append(["S"])
                     else:
                         logger.info(f"Le joueur : {self.indexed_name_players[joueur_actuel]} passe")
                         joueurs_en_jeu.remove(joueur_actuel)
+                        pretty_play_joueurs[joueur_actuel].append(["P"])
 
             if len(joueurs_en_jeu) == 1:
                 self.risque_saut = False
@@ -350,20 +359,27 @@ class Partie:
                 logger.info(
                     f"{self.indexed_name_players[joueurs_en_jeu[0]]} a la main"
                 )
-                for i in range(len(self.players)):
-                    total_pretty_play_joueurs[i].append(
-                        show_super_pretty_hand([el2 for el in pretty_play_joueurs[i] for el2 in el]))
-                pretty_play_joueurs = {i: [] for i in range(len(self.players))}
+                total_pretty_play_joueurs, pretty_play_joueurs = self.reset_pretty_play_joueurs(
+                    total_pretty_play_joueurs, pretty_play_joueurs, joueurs_pas_fini
+                )
                 historique_jeux.append(copy(cartes_plateau))
                 cartes_plateau = []
                 self.counter_same_card = 0
                 prochain_joueur = joueurs_en_jeu[0]
                 joueurs_en_jeu = copy(joueurs_pas_fini)
 
+            elif prochain_joueur < joueur_actuel:
+                # On revient au début de l'indexation des joueurs
+                total_pretty_play_joueurs, pretty_play_joueurs = self.reset_pretty_play_joueurs(
+                    total_pretty_play_joueurs, pretty_play_joueurs, joueurs_pas_fini
+                )
             joueur_actuel = prochain_joueur
             flag_triche = False
 
-        logger.info(str(total_pretty_play_joueurs))
+        df_pretty_play_joueurs = pd.DataFrame(total_pretty_play_joueurs)
+        df_pretty_play_joueurs.to_csv("resume_partie.csv")
+        logger.info(str(df_pretty_play_joueurs))
+
         # Ajout du joueur arrivé en dernier
         classement = classement + [
             ({i for i in range(nb_joueurs)} - set(liste_tricheurs) - set(classement)).pop()
@@ -377,6 +393,17 @@ class Partie:
         self.historique_jeux = historique_jeux
         self.all_events += events_actuel
         self.cartes_deja_jouees = cartes_deja_jouees
+
+    def reset_pretty_play_joueurs(self, total_pretty_play_joueurs, pretty_play_joueurs, joueurs_pas_fini):
+        if all(not len(el) for el in pretty_play_joueurs.values()):
+            a = 3
+        for i in range(len(self.players)):
+            action_jouee = pretty_actions_jouees([el2 for el in pretty_play_joueurs[i] for el2 in el])
+            if i not in joueurs_pas_fini and action_jouee == "":
+                action_jouee = "x"
+            total_pretty_play_joueurs[i].append(action_jouee)
+        pretty_play_joueurs = {i: [] for i in range(len(self.players))}
+        return total_pretty_play_joueurs, pretty_play_joueurs
 
     def show_game(self):
         print("".join([el for el in self.all_events]))
